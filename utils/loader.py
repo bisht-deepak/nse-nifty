@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
+
 from utils.columns import resolve_column
 from utils.constants import (
     EXPECTED_CONSTITUENTS,
@@ -44,6 +45,37 @@ def find_header_row(filepath: Path) -> int:
                 return i
 
     raise ValueError(f"Header not found in {filepath.name}")
+
+
+# ============================================================================
+# Read csv with fallback
+# ============================================================================
+
+def read_csv_with_fallback(filepath: Path, skiprows: int) -> pd.DataFrame:
+    """
+    Read a CSV trying several common encodings.
+    """
+
+    encodings = [
+        "utf-8-sig",
+        "utf-8",
+        "cp1252",
+        "latin1",
+    ]
+
+    last_error = None
+
+    for encoding in encodings:
+        try:
+            return pd.read_csv(
+                filepath,
+                skiprows=skiprows,
+                encoding=encoding,
+            )
+        except UnicodeDecodeError as e:
+            last_error = e
+
+    raise last_error
 
 
 # ============================================================================
@@ -138,6 +170,22 @@ def keep_constituents(df: pd.DataFrame) -> pd.DataFrame:
 
     return df[df["rank"].between(1, EXPECTED_CONSTITUENTS)].copy()
 
+def clean_numeric(series: pd.Series) -> pd.Series:
+    """
+    Standardize numeric strings before conversion.
+    """
+
+    return (
+        series.astype(str)
+        .str.strip()
+        .str.replace(",", "", regex=False)
+        .str.replace("%", "", regex=False)
+        # Convert accounting negatives: (0.01) -> -0.01
+        .str.replace(r"^\((.*)\)$", r"-\1", regex=True)
+        # Treat common placeholders as missing
+        .replace({"": pd.NA, "-": pd.NA, "--": pd.NA})
+    )
+
 
 def clean_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -149,12 +197,7 @@ def clean_dtypes(df: pd.DataFrame) -> pd.DataFrame:
         if col not in df.columns:
             continue
 
-        df[col] = (
-            df[col]
-            .astype(str)
-            .str.replace(",", "", regex=False)
-            .str.strip()
-        )
+        df[col] = clean_numeric(df[col])
 
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -216,11 +259,7 @@ def load_nifty_report(filepath: str | Path) -> pd.DataFrame:
 
     header_row = find_header_row(filepath)
 
-    df = pd.read_csv(
-        filepath,
-        skiprows=header_row,
-        encoding="utf-8-sig",
-    )
+    df = read_csv_with_fallback(filepath, skiprows=header_row)
 
     df = remove_empty_columns(df)
 

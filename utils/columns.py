@@ -14,6 +14,7 @@ COLUMN_KEYWORDS = {
     "Industry": "industry",
     "Equity": "equity_capital",
     "Market": "free_float_market_cap",
+    "MCAP": "free_float_market_cap",
     "Weight": "weight",
     "Beta": "beta",
     "R2": "r2",

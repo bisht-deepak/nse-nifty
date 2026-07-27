@@ -45,3 +45,18 @@ STANDARD_COLUMNS = [
     "monthly_return",
     "impact_cost",
 ]
+
+# =============================================================================
+# Historical Symbol Renames
+#
+# Used only for metadata enrichment. Some companies changed their NSE trading
+# symbols over time (e.g. VSNL -> TATACOMM). These mappings allow company_name
+# and industry to be filled across historical symbol changes while preserving
+# the original symbol in the compiled dataset.
+# =============================================================================
+
+HISTORICAL_SYMBOL_RENAMES  = {
+    "BAJAJAUTO": "BAJAJ-AUTO",
+    "REL": "RELINFRA",
+    "VSNL": "TATACOMM",
+}

@@ -8,8 +8,11 @@ import pandas as pd
 from tqdm import tqdm
 
 from utils.loader import load_nifty_report
-from utils.constants import EXPECTED_CONSTITUENTS, REQUIRED_COLUMNS
-
+from utils.constants import (
+    EXPECTED_CONSTITUENTS, 
+    REQUIRED_COLUMNS,
+    HISTORICAL_SYMBOL_RENAMES 
+)
 
 # =============================================================================
 # Configuration
@@ -26,6 +29,45 @@ OUTPUT_CSV = OUTPUT_DIR / "nifty50_history.csv"
 ERROR_LOG = Path("data/metadata/audits/compile_errors.csv")
 ERROR_LOG.parent.mkdir(parents=True, exist_ok=True)
 
+
+# =============================================================================
+# Fill Missing Metadata
+# =============================================================================
+
+def fill_metadata(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fill missing company names and industries using
+    values available for the same company in other reports.
+    """
+
+    df = df.copy()
+
+    # Normalize historical symbols
+    df["lookup_symbol"] = df["symbol"].replace(HISTORICAL_SYMBOL_RENAMES )
+
+    df = df.sort_values(["lookup_symbol", "report_date"])
+
+    df["company_name"] = (
+        df.groupby("lookup_symbol")["company_name"]
+          .transform(lambda x: x.ffill().bfill())
+    )
+
+    df["industry"] = (
+        df.groupby("lookup_symbol")["industry"]
+          .transform(lambda x: x.ffill().bfill())
+    )
+
+    df = (
+        df.drop(columns="lookup_symbol")
+          .sort_values(["report_date", "rank"])
+          .reset_index(drop=True)
+    )
+
+    df.loc[df["symbol"] == "GLAXO", "company_name"] = (
+        "GlaxoSmithKline Pharmaceuticals Ltd."
+    )
+    
+    return df
 
 # =============================================================================
 # Validation
@@ -117,6 +159,19 @@ def validate_dataset(df: pd.DataFrame) -> None:
 
     print(f"✓ Rank range is 1–{EXPECTED_CONSTITUENTS} for every report")
 
+    # -------------------------------------------------------------------------
+    # Missing metadata
+    # -------------------------------------------------------------------------
+
+    missing_company = df["company_name"].isna().sum()
+    missing_industry = df["industry"].isna().sum()
+
+    if missing_company:
+        print(f"⚠ Missing company_name: {missing_company}")
+
+    if missing_industry:
+        print(f"⚠ Missing industry: {missing_industry}")
+
     print("\n" + "=" * 60)
     print("DATASET VALIDATION PASSED")
     print("=" * 60)
@@ -162,6 +217,8 @@ def main():
         .sort_values(["report_date", "rank"])
         .reset_index(drop=True)
     )
+
+    master = fill_metadata(master)
 
     # -------------------------------------------------------------------------
     # Validate
